@@ -1,352 +1,231 @@
-# Microsoft Copilot Studio ❤️ MCP
+# Sample Banking MCP Server
 
-Welcome to the **Microsoft Copilot Studio ❤️ MCP** lab. In this lab, you will learn how to deploy an MCP Server, and how to add it to Microsoft Copilot Studio.
+A no-auth sample banking application exposed as a
+[Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction)
+server. Customer, account, and transaction data is stored in human-readable
+JSON files under `data/`.
 
-## ❓ What is MCP?
+> [!WARNING]
+> This project is for demos and learning only. It has no authentication,
+> authorization, encryption, or production-grade database.
 
-[Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) is an open protocol that standardizes how applications provide context to LLMs, defined by [Anthropic](https://www.anthropic.com/). MCP provides a standardized way to connect AI models to different data sources and tools. MCP allows makers to seamlessly integrate existing knowledge servers and APIs directly into Copilot Studio.
+## Data
 
-Currently, Copilot Studio only supports Tools. To learn more about current capabilities, see [aka.ms/mcsmcp](https://aka.ms/mcsmcp). There are some known issues & planned improvements. These are listed [here](#known-issues-and-planned-improvements).
+- `data/customers.json`: first name, last name, and customer ID
+- `data/accounts.json`: account type, open date, balance, status, customer ID,
+  and account ID
+- `data/transactions.json`: detailed deposits and withdrawals, including
+  before/after balances, timestamps, and descriptions
 
-## 🆚 MCP vs Connectors
+Balances are rounded to cents. Mutations are serialized to prevent concurrent
+withdrawals from spending the same balance.
 
-When do you use MCP? And when do you use connectors? Will MCP replace connectors?
+## MCP tools
 
-MCP servers are made available to Copilot Studio using connector infrastructure, so these questions are not really applicable. The fact that MCP servers use the connector infrastructure means they can employ enterprise security and governance controls such as [Virtual Network](https://learn.microsoft.com/power-platform/admin/vnet-support-overview) integration, [Data Loss Prevention](https://learn.microsoft.com/power-platform/admin/wp-data-loss-prevention) controls, [multiple authentication methods](https://learn.microsoft.com/connectors/custom-connectors/#2-secure-your-api)—all of which are available in this release—while supporting real-time data access for AI-powered agents.
+| Tool | Purpose |
+| --- | --- |
+| `list-customers` | List all customers |
+| `get-customer` | Find a customer by ID |
+| `list-accounts` | List all accounts or filter by customer ID |
+| `balance-inquiry` | Return an account's current balance and status |
+| `deposit` | Deposit a positive amount into an active account |
+| `withdraw` | Withdraw from an active account when sufficient funds exist |
+| `transaction-history` | Query the detailed log by account or customer |
 
-So, MCP and connectors are really **better together**.
+Deposits and withdrawals are rejected for frozen or closed accounts.
+Withdrawals are also rejected when the requested amount exceeds the current
+balance, without changing the account or transaction files.
 
-## ⚙️ Prerequisites
+## Run locally
 
-- Visual Studio Code ([link](https://code.visualstudio.com/download))
-- Node v22 (ideally installed via [nvm for Windows](https://github.com/coreybutler/nvm-windows) or [nvm](https://github.com/nvm-sh/nvm))
-- Git installed ([link](https://git-scm.com/downloads))
-- Azure Developer CLI ([link](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd))
-- Azure Subscription (with payment method added)
-- GitHub account
-- Copilot Studio trial or developer account
+Requires Node.js 22 or later.
 
-## ➕ Create a new GitHub repository based on the template
-
-1. Select `Use this template`
-1. Select `Create a new repository
-
-    ![](./assets/usetemplate.png)
-
-1. Select the right `Owner` (it might already be selected when you have only one owner to choose from)
-1. Give it a `Repository name`
-1. Optionally you can give it a `Description`
-1. Select `Private`
-1. Select `Create repository`
-
-    This will take a little while. After it's done, you will be directed to the newly created repository.
-
-## ⚖️ Choice: Run the server locally or deploy to Azure
-
-Now you have a choice! You either run the server locally - or you can deploy it to Azure.
-
-There are a couple of steps that you need to do for both:
-
-1. Clone this repository by running the following command (replace `{account}` by your own GitHub account name): 
-
-    `git clone https://github.com/{account}/mcsmcp.git`
-
-1. Open Visual Studio Code and open the cloned folder
-1. Open the terminal and navigate to the cloned folder
-
-### 🏃‍♀️ Run the MCP Server Locally
-
-1. Run `npm install`
-1. Run `npm run build && npm run start`
-
-    ![Terminal view after building and starting the server](./assets/vscode-terminal-run-start.png)
-
-1. Select `PORTS` at the top of the Visual Studio Code Terminal
-
-    ![Image of VS Code where the terminal is open and the PORTS tab is highlighted](./assets/vscode-terminal-ports.png)
-
-1. Select the green `Forward a Port` button
-
-    ![Image of VS Code where the PORTS tab is open and the green `Forward a Port` button is highlighted](./assets/vscode-terminal-ports-forward.png)
-
-1. Enter `3000` as the port number (this should be the same as the port number you see when you ran the command in step 5). You might be prompted to sign in to GitHub, if so please do this, since this is required to use the port forwarding feature.
-1. Right click on the row you just added and select `Port visibility` > `Public` to make the server publicly available
-1. Ctrl + click on the `Forwarded address`, which should be something like: `https://something-3000.something.devtunnels.ms`
-1. Select `Copy` on the following pop-up to copy the URL
-
-    ![View of the PORTS setup with highlighted the port, the forwarded address and the visibility](./assets/vscode-terminal-ports-setup.png) 
-
-1. Open to the browser of your choice and paste the URL in the address bar, type `/mcp` behind it and hit enter
-
-If all went well, you will see the following error message:
-
-```json
-{"jsonrpc":"2.0","error":{"code":-32000,"message":"Method not allowed."},"id":null}
+```powershell
+npm install
+npm test
+npm start
 ```
 
-Don't worry - this error message is nothing to be worried about!
+The MCP endpoint is available at `http://localhost:3000/mcp`. Configure an MCP
+client to use that Streamable HTTP URL.
 
-### 🌎 Deploy to Azure
+## Sample requests
 
-> [!IMPORTANT]
-> As listed in the [prerequisites](#️-prerequisites), the [Azure Developer CLI ](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd) needs to be installed on your machine for this part.
+After connecting the server to an MCP client, try:
 
-Make sure to login to Azure Developer CLI if you haven't done that yet.
-
-```azurecli
-azd auth login
+```text
+List the accounts for customer CUST-1001.
+What is the balance of ACCT-2001?
+Deposit $125.50 into ACCT-2001 with the description "Paycheck".
+Withdraw $40 from ACCT-2001 with the description "ATM withdrawal".
+Show the transaction history for ACCT-2001.
 ```
 
-> [!WARNING]  
-> After running `azd up`, you will have an MCP Server running on Azure that is publicly available. Ideally, you don't want that. Make sure to run `azd down` after finishing the lab to delete all the resources from your Azure subscription. Learn how to run `azd down` by going to [this section](#-remove-the-azure-resources). 
+## Deploy to a Windows VM
 
-Run the following command in the terminal:
+The deployment package runs two automatic Windows services:
 
-```azurecli
-azd up
+- `BankingMcp` runs the Node.js server on `127.0.0.1:3000` through
+  [WinSW](https://github.com/winsw/winsw).
+- `BankingMcpCaddy` runs a custom [Caddy](https://caddyserver.com/) build with
+  the GoDaddy DNS plugin on port 443, obtains and renews a public TLS certificate
+  through DNS-01 validation, and proxies requests to the local MCP server.
+
+The MCP endpoint is `https://<your-domain>/mcp`. Port 3000 is never opened
+through Windows Firewall and is not reachable through the VM's public network
+interface.
+
+> [!CAUTION]
+> TLS protects traffic in transit but does not authenticate callers. This
+> sample intentionally has no authentication, so anyone who can reach the
+> endpoint can use its banking tools. Restrict inbound traffic at the Azure
+> network security group when the endpoint should not be generally public.
+
+### Prerequisites
+
+On the build computer:
+
+- Windows PowerShell 5.1 or PowerShell 7
+- Node.js 22 or later
+- Internet access to download a custom Caddy build and WinSW
+
+On the Windows VM:
+
+- A private IP reachable by the intended MCP clients
+- Private DNS resolving the custom hostname to that private IP
+- The public authoritative DNS zone hosted by GoDaddy
+- A GoDaddy production API key and secret with permission to modify DNS records
+- Inbound TCP 443 allowed from the client networks by the VM's Azure network
+  security group
+- Outbound HTTPS access to the certificate authority and GoDaddy API
+- An elevated Windows PowerShell session for installation
+
+The VM does not need a public IP. Do not create inbound rules for ports 80 or
+3000. DNS-01 validation works by creating temporary `_acme-challenge` TXT
+records through GoDaddy's API rather than connecting to the VM.
+
+When upgrading from the earlier HTTP-01 configuration, remove its TCP 80 rule
+from the Azure network security group. The installer removes the obsolete
+Windows Firewall rule automatically.
+
+### 1. Build a deployment package
+
+From the repository root:
+
+```powershell
+.\deployment\New-DeploymentPackage.ps1
 ```
 
-For the unique environment name, enter `mcsmcplab` or something similar. Select the Azure Subscription to use and select a value for the location. After that, it will take a couple of minutes before the server has been deployed. When it's done - you should be able to go to the URL that's listed at the end and add `/mcp` to the end of that URL.
+The script installs exact npm lockfile dependencies, runs all tests, compiles
+TypeScript, downloads a Caddy Windows build containing
+`github.com/caddy-dns/godaddy` and WinSW 2.12.0, bundles the current Node
+runtime, and writes:
 
-![Azd deploy server output](./assets/azd-deploy-server.png)
-
-You should again see the following error:
-
-```json
-{"jsonrpc":"2.0","error":{"code":-32000,"message":"Method not allowed."},"id":null}
+```text
+artifacts\sample-banking-mcp-1.0.0.zip
 ```
 
-## 👨‍💻 Use the Jokes MCP Server in Visual Studio Code / GitHub Copilot
-
-To use the Jokes MCP Server, you need to use the URL of your server (can be either your devtunnel URL or your deployed Azure Container App) with the `/mcp` part at the end and add it as an MCP Server in Visual Studio Code.
-
-1. Press either `ctrl` + `shift` + `P` (Windows/Linux) or `cmd` + `shift` + `P` (Mac) and type `MCP`
-1. Select `MCP: Add Server...`
-1. Select `HTTP (HTTP or Server-Sent Events)`
-1. Paste the URL of your server in the input box (make sure `/mcp` in the end is included)
-1. Press `Enter`
-1. Enter a name for the server, for instance `JokesMCP`
-1. Select `User Settings` to save the MCP Server settings in your user settings
-
-    This will add an MCP Server to your `settings.json` file. It should look like this:
-    ![settings.json file](./assets/settings.png)
-
-1. Open `GitHub Copilot`
-1. Switch from `Ask` to `Agent`
-1. Make sure the `JokesMCP` server actions are selected when you select the tools icon:
-
-    ![Tools menu in GitHub Copilot](./assets/tools-menu.png)
-
-1. Ask the following question:
-
-    ```text
-    Get a chuck norris joke from the Dev category
-    ```
-
-This should give you a response like this:
-
-![Screenshot of question to provide a joke from the dev category and the answer from GitHub Copilot](./assets/github-copilot-get-joke.png)
-
-Now you have added the `JokesMCP` server to Visual Studio Code!
-
-## 👨‍💻 Use the Jokes MCP Server in Microsoft Copilot Studio
-
-**Import the Connector**
-
-1. Go to https://make.preview.powerapps.com/customconnectors (make sure you’re in the correct environment) and click **+ New custom connector**. 
-1. Select `Import from GitHub`
-1. Select `Custom` as **Connector Type**
-1. Select `dev` as the **Branch**
-1. Select `MCP-Streamable-HTTP` as the **Connector**
-1. Select `Continue`
-
-    ![View of the import from GitHub section](./assets/import-from-github.png)
-
-1. Change the **Connector Name** to something appropriate, like for instance `Jokes MCP` 
-1. Change the **Description** to something appropriate
-1. Paste your root URL (for instance `something-3000.something.devtunnels.ms` or `something.azurecontainerapps.io`) in the **Host** field
-1. Select **Create connector** 
-
-> [!WARNING]  
-> You may see a warning and an error upon creation – it should be resolved soon - but you can ignore it for now.
-
-11. Close the connector
-
-
-**Create an agent and add the MCP server as a tool**
-
-1. Go to https://copilotstudio.preview.microsoft.com/
-1. Select the environment picker at the top right corner
-1. Select the right environment (the environment with the `Get new features early` toggle switched on)
-1. Select `Create` in the left navigation
-1. Select the blue `New agent` button
-
-    ![New agent](./assets/newagent.png)
-
-1. Select the `Configure` tab on the left
-
-    ![Configure](./assets/configure.png)
-
-1. Change the name to `Jokester`
-1. Add the following `Description`
-
-    ```text
-    A humor-focused agent that delivers concise, engaging jokes only upon user request, adapting its style to match the user's tone and preferences. It remains in character, avoids repetition, and filters out offensive content to ensure a consistently appropriate and witty experience.
-    ```
-
-1. Add the following `Instructions`
-
-    ```text
-    You are a joke-telling assistant. Your sole purpose is to deliver appropriate, clever, and engaging jokes upon request. Follow these rules:
-    
-    * Respond only when the user asks for a joke or something related (e.g., "Tell me something funny").
-    * Match the tone and humor preference of the user based on their input—clean, dark, dry, pun-based, dad jokes, etc.
-    * Never break character or provide information unrelated to humor.
-    * Keep jokes concise and clearly formatted.
-    * Avoid offensive, discriminatory, or NSFW content.
-    * When unsure about humor preference, default to a clever and universally appropriate joke.
-    * Do not repeat jokes within the same session.
-    * Avoid explaining the joke unless explicitly asked.
-    * Be responsive, witty, and quick.
-    ```
-
-1. Select `Continue` on the top right
-
-    ![Click continue to create agent](./assets/continue.png)
-
-1. Enable Generative AI `Orchestration`
-
-    ![Turn on orchestration](./assets/turnonorchestration.png)
-
-1. Disable general knowledge in the `Knowledge` section
-
-    ![Turn off general knowledge](./assets/turnoffgeneralknowledge.png)
-
-1. Select `Tools` in the top menu
- 
-    ![Tools](./assets/tools.png)
-
-1. Select `Add a tool`
-
-    ![Add a tool](./assets/addatool.png)
-
-1. Select the `Model Context Protocol` tab to filter all the Model Context Protocol Servers (see number 1 in the screenshot below)
-
-1. Select the `Jokes MCP` server (see number 2 in the screenshot below)
-
-    ![MCP](./assets/mcpsteps.png)
-
-1. Create a new connection by selecting the `Not connected` and **Create new Connection**
-
-    ![Action and connection](./assets/create-connection-action.png)
-
-1. Select `Create`
-
-    ![Create connection](./assets/create-connection-action-create.png)
-
-1. Select `Add to agent` to add the tool to the agent
-
-    ![Add tool to agent](./assets/add-tool-to-agent.png)
-
-1. Select the `refresh icon` in the `Test your agent` pane
-
-    ![Refresh testing pane](./assets/refreshtestingpane.png)
-
-1. In the `Test your agent` pane send the following message:
-
-    ```text
-    Can I get a Chuck Norris joke?
-    ```
-  
-    This will show you message that additional permissions are required to run this action. This is because of the user authentication in the action wizard.
-
-1. Select `Connect`
-
-    ![Additional permissions](./assets/additionalpermissions.png)
-  
-    This will open a new window where you can manage your connections for this agent.
-
-1. Select `Connect` next to the `JokesMCP`
-
-    ![Connect to JokesMCP](./assets/connect.png)
-
-1. Wait until the connection is created and select `Submit`
-
-    ![Pick a connection](./assets/submitconnection.png)
-
-1. The connection should now be connected, so the status should be set to `Connected`
-
-    ![Status connected](./assets/connected.png) 
-
-1. Close the manage your connections tab in your browser
-
-    Now you should be back in the Jokester agent screen.
-
-1. Select the `refresh icon` in the `Test your agent` pane
-
-    ![Refresh testing pane](./assets/refreshtestingpane.png)
-
-1. In the `Test your agent` pane send the following message:
-
-    ```text
-    Can I get a Chuck Norris joke?
-    ```
-
-    This will now show a Chuck Norris joke - instead of the additional permissions. If that's not the case - you probably have missed the [prerequisite](#️-prerequisites) that the environment needs to have the `get new features early` toggle on.
-
-    ![Chuck Norris joke](./assets/chucknorrisjoke.png)
-
-1. In the `Test your agent` pane send the following message:
-
-    ```text
-    Can I get a Dad joke?
-    ```
-
-    This will now show a Dad joke.
-
-    ![Dad joke](./assets/dadjoke.png)
-
-And that was the Jokes MCP Server working in Microsoft Copilot Studio.
-
-## ❌ Remove the Azure resources
-
-To remove the Azure resources after finishing the lab, run the following command in the terminal:
-
-```azurecli
-azd down
+It also verifies that the Caddy binary exposes `dns.providers.godaddy` and
+prints the archive's SHA-256 hash.
+
+### 2. Prepare DNS and the Azure VM
+
+1. Create a GoDaddy production API key and secret. The required installer token
+   format is `KEY:SECRET`.
+2. Configure private DNS so the custom hostname resolves to the VM's private IP
+   for MCP clients.
+3. Add an Azure network security group inbound rule for TCP 443 from only the
+   private client network ranges.
+4. Copy the deployment ZIP to the VM and extract it to a temporary folder.
+
+The public GoDaddy zone does not need an `A` record pointing to the VM. Caddy
+only uses that zone to create temporary DNS TXT records for certificate
+validation.
+
+### 3. Install or upgrade
+
+Open an elevated Windows PowerShell session in the extracted package:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\Install-BankingMcp.ps1 `
+  -DomainName "bank.example.com" `
+  -AcmeEmail "admin@example.com"
 ```
-This command will show you the resources that will be deleted and then ask you to confirm. Confirm with `y` and the resources will be deleted. This can take a couple of minutes, but at the end you will see a confirmation:
 
-![resources deleted](./assets/azd-down-confirmation.png)
+The installer securely prompts for the GoDaddy token. Paste `KEY:SECRET`; the
+value is not echoed or placed in PowerShell history. It is stored as a Caddy
+service environment variable in the WinSW XML, whose ACL permits access only to
+Administrators, SYSTEM, and LocalService.
 
-## 💡 Known issues and planned improvements
+The default installation root is `C:\Services\BankingMcp`. Use
+`-InstallRoot "D:\Services\BankingMcp"` to select another fixed drive.
 
-There are some known issues and planned improvements for MCP in Microsoft Copilot Studio. They are listed in [this Microsoft Learn article](https://aka.ms/mcsmcpdocs#known-issues--planned-improvements).
+The installer:
 
-## 🗣️ Feedback
+1. Stops existing banking services during an upgrade.
+2. replaces application and runtime files;
+3. initializes seed JSON only when a data file does not already exist;
+4. preserves all existing JSON balances and transactions;
+5. grants the restricted `LocalService` account only the required file access;
+6. installs both services with automatic delayed startup and failure recovery;
+7. opens Windows Firewall port 443;
+8. checks the local application health endpoint; and
+9. starts Caddy so it can complete GoDaddy DNS-01 validation and obtain the
+   certificate.
 
-Hopefully you liked the lab. Please take the time to fill in our [feedback form](https://aka.ms/mcsmcp/lab/feedback) to tell us how we can improve!
+Run the installer from each new deployment package to upgrade. Back up
+`C:\Services\BankingMcp\data` before upgrades or manual data maintenance.
 
-## 🚀 Contributing
+### Verify
 
-This project welcomes contributions and suggestions.  Most contributions require you to agree to a
-Contributor License Agreement (CLA) declaring that you have the right to, and actually do, grant us
-the rights to use your contribution. For details, visit https://cla.opensource.microsoft.com.
+Check service state:
 
-When you submit a pull request, a CLA bot will automatically determine whether you need to provide
-a CLA and decorate the PR appropriately (e.g., status check, comment). Simply follow the instructions
-provided by the bot. You will only need to do this once across all repos using our CLA.
+```powershell
+Get-Service BankingMcp, BankingMcpCaddy
+Invoke-RestMethod http://127.0.0.1:3000/health
+```
 
-This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/).
-For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or
-contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
+From a computer connected to the private network:
 
-## ™️ Trademarks
+```powershell
+Invoke-WebRequest https://bank.example.com/health
+```
 
-This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft 
-trademarks or logos is subject to and must follow 
-[Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/legal/intellectualproperty/trademarks/usage/general).
-Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship.
-Any use of third-party trademarks or logos are subject to those third-party's policies.
+Configure the MCP client with:
 
-![Microsoft Copilot Studio ❤️ MCP](https://m365-visitor-stats.azurewebsites.net/?resource=https://github.com/microsoft/mcsmcp)
+```text
+https://bank.example.com/mcp
+```
+
+WinSW service logs and Caddy access logs are written under
+`C:\Services\BankingMcp\logs`. Caddy certificate state is under
+`C:\Services\BankingMcp\caddy\data\caddy` and survives service or VM restarts.
+
+### Service operations
+
+```powershell
+Restart-Service BankingMcp
+Restart-Service BankingMcpCaddy
+Get-Content C:\Services\BankingMcp\logs\BankingMcpService.out.log -Tail 100
+Get-Content C:\Services\BankingMcp\logs\CaddyService.out.log -Tail 100
+```
+
+Both services start automatically after a VM restart and are configured to
+restart after process failures. Caddy renews the certificate through the
+GoDaddy API without inbound internet connectivity.
+
+### Remove the services
+
+Run these commands from an elevated PowerShell session:
+
+```powershell
+Stop-Service BankingMcpCaddy, BankingMcp
+& C:\Services\BankingMcp\services\CaddyService.exe uninstall
+& C:\Services\BankingMcp\services\BankingMcpService.exe uninstall
+Remove-NetFirewallRule -Name BankingMcp-HTTPS
+```
+
+The commands intentionally leave the installation and `data` directory in
+place. Remove or archive those files separately only after confirming the
+banking records are no longer needed.

@@ -21,6 +21,7 @@ dist/
 logs/
 *.log
 .azure
+artifacts/
 
 # Node.js Tools for Visual Studio
 .ntvs_analysis.dat

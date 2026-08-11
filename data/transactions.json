@@ -1,0 +1,46 @@
+[
+  {
+    "transactionId": "TXN-3001",
+    "accountId": "ACCT-2001",
+    "customerId": "CUST-1001",
+    "type": "deposit",
+    "amount": 2500,
+    "balanceBefore": 0,
+    "balanceAfter": 2500,
+    "timestamp": "2026-07-01T14:30:00.000Z",
+    "description": "Opening deposit"
+  },
+  {
+    "transactionId": "TXN-3002",
+    "accountId": "ACCT-2001",
+    "customerId": "CUST-1001",
+    "type": "withdrawal",
+    "amount": 149.25,
+    "balanceBefore": 2500,
+    "balanceAfter": 2350.75,
+    "timestamp": "2026-07-03T18:15:00.000Z",
+    "description": "Utility payment"
+  },
+  {
+    "transactionId": "TXN-3003",
+    "accountId": "ACCT-2002",
+    "customerId": "CUST-1001",
+    "type": "deposit",
+    "amount": 8200,
+    "balanceBefore": 0,
+    "balanceAfter": 8200,
+    "timestamp": "2026-07-05T09:00:00.000Z",
+    "description": "Savings contribution"
+  },
+  {
+    "transactionId": "TXN-3004",
+    "accountId": "ACCT-2003",
+    "customerId": "CUST-1002",
+    "type": "deposit",
+    "amount": 975.4,
+    "balanceBefore": 0,
+    "balanceAfter": 975.4,
+    "timestamp": "2026-06-20T12:00:00.000Z",
+    "description": "Opening deposit"
+  }
+]

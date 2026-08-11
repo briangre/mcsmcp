@@ -1,0 +1,17 @@
+[
+  {
+    "first": "Avery",
+    "last": "Morgan",
+    "customerId": "CUST-1001"
+  },
+  {
+    "first": "Jordan",
+    "last": "Lee",
+    "customerId": "CUST-1002"
+  },
+  {
+    "first": "Sam",
+    "last": "Patel",
+    "customerId": "CUST-1003"
+  }
+]

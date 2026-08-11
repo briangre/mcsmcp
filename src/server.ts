@@ -2,162 +2,201 @@ import express, { Request, Response } from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
+import { BankStore, BankingError } from "./bankStore.js";
 
-const server = new McpServer({
-  name: "mcp-streamable-http",
-  version: "1.0.0",
-});
+const bank = new BankStore(process.env.BANK_DATA_DIRECTORY);
 
-// Get Chuck Norris joke tool
-const getChuckJoke = server.tool(
-  "get-chuck-joke",
-  "Get a random Chuck Norris joke",
-  async () => {
-    const response = await fetch("https://api.chucknorris.io/jokes/random");
-    const data = await response.json();
-    return {
-      content: [
-        {
-          type: "text",
-          text: data.value,
-        },
-      ],
-    };
-  }
-);
+function toolResult(value: unknown) {
+  return {
+    content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }],
+  };
+}
 
-// Get Chuck Norris joke by category tool
-const getChuckJokeByCategory = server.tool(
-  "get-chuck-joke-by-category",
-  "Get a random Chuck Norris joke by category",
-  {
-    category: z.string().describe("Category of the Chuck Norris joke"),
-  },
-  async (params: { category: string }) => {
-    const response = await fetch(
-      `https://api.chucknorris.io/jokes/random?category=${params.category}`
-    );
-    const data = await response.json();
-    return {
-      content: [
-        {
-          type: "text",
-          text: data.value,
-        },
-      ],
-    };
-  }
-);
+function toolError(error: unknown) {
+  const message =
+    error instanceof BankingError
+      ? `${error.code}: ${error.message}`
+      : error instanceof Error
+        ? error.message
+        : "Unknown banking error.";
 
-// Get Chuck Norris joke categories tool
-const getChuckCategories = server.tool(
-  "get-chuck-categories",
-  "Get all available categories for Chuck Norris jokes",
-  async () => {
-    const response = await fetch("https://api.chucknorris.io/jokes/categories");
-    const data = await response.json();
-    return {
-      content: [
-        {
-          type: "text",
-          text: data.join(", "),
-        },
-      ],
-    };
-  }
-);
+  return {
+    isError: true,
+    content: [{ type: "text" as const, text: message }],
+  };
+}
 
-// Get Dad joke tool
-const getDadJoke = server.tool(
-  "get-dad-joke",
-  "Get a random dad joke",
-  async () => {
-    const response = await fetch("https://icanhazdadjoke.com/", {
-      headers: {
-        Accept: "application/json",
-      },
-    });
-    const data = await response.json();
-    return {
-      content: [
-        {
-          type: "text",
-          text: data.joke,
-        },
-      ],
-    };
-  }
-);
-
-const app = express();
-app.use(express.json());
-
-const transport: StreamableHTTPServerTransport =
-  new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined, // set to undefined for stateless servers
+function createMcpServer(): McpServer {
+  const server = new McpServer({
+    name: "sample-banking-mcp",
+    version: "1.0.0",
   });
 
-// Setup routes for the server
-const setupServer = async () => {
-  await server.connect(transport);
-};
+  server.tool(
+    "list-customers",
+    "List all customers in the sample bank",
+    async () => toolResult(await bank.listCustomers())
+  );
+
+  server.tool(
+    "get-customer",
+    "Get a customer by customer ID",
+    { customerId: z.string().min(1).describe("Customer ID") },
+    async ({ customerId }) => {
+      try {
+        return toolResult(await bank.getCustomer(customerId));
+      } catch (error) {
+        return toolError(error);
+      }
+    }
+  );
+
+  server.tool(
+    "list-accounts",
+    "List bank accounts, optionally filtered by customer ID",
+    {
+      customerId: z
+        .string()
+        .min(1)
+        .optional()
+        .describe("Optional customer ID filter"),
+    },
+    async ({ customerId }) => toolResult(await bank.listAccounts(customerId))
+  );
+
+  server.tool(
+    "balance-inquiry",
+    "Get the current balance and status for an account",
+    { accountId: z.string().min(1).describe("Account ID") },
+    async ({ accountId }) => {
+      try {
+        const account = await bank.getAccount(accountId);
+        return toolResult({
+          accountId: account.accountId,
+          customerId: account.customerId,
+          type: account.type,
+          status: account.status,
+          balance: account.balance,
+        });
+      } catch (error) {
+        return toolError(error);
+      }
+    }
+  );
+
+  const transactionInput = {
+    accountId: z.string().min(1).describe("Account ID"),
+    amount: z.number().positive().describe("Positive amount in dollars"),
+    description: z
+      .string()
+      .max(200)
+      .optional()
+      .describe("Optional transaction description"),
+  };
+
+  server.tool(
+    "deposit",
+    "Deposit funds into an active account",
+    transactionInput,
+    async ({ accountId, amount, description }) => {
+      try {
+        return toolResult(await bank.deposit(accountId, amount, description));
+      } catch (error) {
+        return toolError(error);
+      }
+    }
+  );
+
+  server.tool(
+    "withdraw",
+    "Withdraw funds from an active account; rejects withdrawals that exceed the available balance",
+    transactionInput,
+    async ({ accountId, amount, description }) => {
+      try {
+        return toolResult(await bank.withdraw(accountId, amount, description));
+      } catch (error) {
+        return toolError(error);
+      }
+    }
+  );
+
+  server.tool(
+    "transaction-history",
+    "Get the detailed transaction log, optionally filtered by account or customer",
+    {
+      accountId: z.string().min(1).optional().describe("Optional account ID"),
+      customerId: z.string().min(1).optional().describe("Optional customer ID"),
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(500)
+        .default(100)
+        .describe("Maximum transactions to return"),
+    },
+    async (query) => toolResult(await bank.getTransactions(query))
+  );
+
+  return server;
+}
+
+const app = express();
+app.disable("x-powered-by");
+app.use(express.json());
+
+app.get("/health", (_req: Request, res: Response) => {
+  res.json({ status: "ok", service: "sample-banking-mcp" });
+});
 
 app.post("/mcp", async (req: Request, res: Response) => {
-  console.log("Received MCP request:", req.body);
+  const server = createMcpServer();
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+  });
+
+  res.on("close", () => {
+    void transport.close();
+    void server.close();
+  });
+
   try {
+    await server.connect(transport);
     await transport.handleRequest(req, res, req.body);
   } catch (error) {
     console.error("Error handling MCP request:", error);
     if (!res.headersSent) {
       res.status(500).json({
         jsonrpc: "2.0",
-        error: {
-          code: -32603,
-          message: "Internal server error",
-        },
+        error: { code: -32603, message: "Internal server error" },
         id: null,
       });
     }
   }
 });
 
-app.get("/mcp", async (req: Request, res: Response) => {
-  console.log("Received GET MCP request");
-  res.writeHead(405).end(
-    JSON.stringify({
-      jsonrpc: "2.0",
-      error: {
-        code: -32000,
-        message: "Method not allowed.",
-      },
-      id: null,
-    })
-  );
-});
+const methodNotAllowed = (_req: Request, res: Response) => {
+  res.status(405).json({
+    jsonrpc: "2.0",
+    error: { code: -32000, message: "Method not allowed." },
+    id: null,
+  });
+};
 
-app.delete("/mcp", async (req: Request, res: Response) => {
-  console.log("Received DELETE MCP request");
-  res.writeHead(405).end(
-    JSON.stringify({
-      jsonrpc: "2.0",
-      error: {
-        code: -32000,
-        message: "Method not allowed.",
-      },
-      id: null,
-    })
-  );
-});
+app.get("/mcp", methodNotAllowed);
+app.delete("/mcp", methodNotAllowed);
 
-// Start the server
-const PORT = process.env.PORT || 3000;
-setupServer()
-  .then(() => {
-    app.listen(PORT, () => {
-      console.log(`MCP Streamable HTTP Server listening on port ${PORT}`);
-    });
+const port = Number(process.env.PORT ?? 3000);
+const host = process.env.HOST ?? "127.0.0.1";
+
+if (!Number.isInteger(port) || port < 1 || port > 65535) {
+  throw new Error("PORT must be an integer between 1 and 65535.");
+}
+
+app
+  .listen(port, host, () => {
+    console.log(`Sample Banking MCP server listening at http://${host}:${port}`);
   })
-  .catch((error) => {
-    console.error("Failed to set up the server:", error);
-    process.exit(1);
+  .on("error", (error) => {
+    console.error("Failed to start the server:", error);
+    process.exitCode = 1;
   });
