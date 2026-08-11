@@ -108,9 +108,26 @@ When upgrading from the earlier HTTP-01 configuration, remove its TCP 80 rule
 from the Azure network security group. The installer removes the obsolete
 Windows Firewall rule automatically.
 
-### 1. Build a deployment package
+### Installation package layout
 
-From the repository root:
+After extracting `sample-banking-mcp-1.0.0.zip`, the package root contains:
+
+```text
+Install-BankingMcp.ps1
+app\
+runtime\
+seed-data\
+templates\
+tools\
+```
+
+There is no `deployment` directory inside the ZIP. If you already have the ZIP,
+skip the source-build section and continue with **Prepare DNS and the Azure VM**.
+
+### 1. Build a package from source (optional)
+
+This step applies only to a source checkout of this repository. From the
+repository root:
 
 ```powershell
 .\deployment\New-DeploymentPackage.ps1
@@ -130,8 +147,7 @@ prints the archive's SHA-256 hash.
 
 ### 2. Prepare DNS and the Azure VM
 
-1. Create a GoDaddy production API key and secret. The required installer token
-   format is `KEY:SECRET`.
+1. Create a GoDaddy production API key and secret.
 2. Configure private DNS so the custom hostname resolves to the VM's private IP
    for MCP clients.
 3. Add an Azure network security group inbound rule for TCP 443 from only the
@@ -142,21 +158,24 @@ The public GoDaddy zone does not need an `A` record pointing to the VM. Caddy
 only uses that zone to create temporary DNS TXT records for certificate
 validation.
 
-### 3. Install or upgrade
+### 3. Install or upgrade the extracted package
 
-Open an elevated Windows PowerShell session in the extracted package:
+Extract the ZIP, then open an elevated Windows PowerShell session in its root
+directory—the directory containing `Install-BankingMcp.ps1`:
 
 ```powershell
+Expand-Archive .\sample-banking-mcp-1.0.0.zip C:\Temp\sample-banking-mcp
+Set-Location C:\Temp\sample-banking-mcp
 Set-ExecutionPolicy -Scope Process Bypass
 .\Install-BankingMcp.ps1 `
   -DomainName "bank.example.com" `
   -AcmeEmail "admin@example.com"
 ```
 
-The installer securely prompts for the GoDaddy token. Paste `KEY:SECRET`; the
-value is not echoed or placed in PowerShell history. It is stored as a Caddy
-service environment variable in the WinSW XML, whose ACL permits access only to
-Administrators, SYSTEM, and LocalService.
+The installer securely prompts separately for the GoDaddy production API key
+and secret. The values are not echoed or placed in PowerShell history. They are
+combined for Caddy and stored as a service environment variable in the WinSW
+XML, whose ACL permits access only to Administrators, SYSTEM, and LocalService.
 
 The default installation root is `C:\Services\BankingMcp`. Use
 `-InstallRoot "D:\Services\BankingMcp"` to select another fixed drive.

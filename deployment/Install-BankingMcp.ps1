@@ -10,7 +10,9 @@ param(
     [ValidatePattern("^[A-Za-z]:\\")]
     [string]$InstallRoot = "C:\Services\BankingMcp",
 
-    [Security.SecureString]$GoDaddyApiToken
+    [Security.SecureString]$GoDaddyApiKey,
+
+    [Security.SecureString]$GoDaddyApiSecret
 )
 
 $ErrorActionPreference = "Stop"
@@ -64,21 +66,41 @@ function Set-Utf8File {
     [IO.File]::WriteAllText($Path, $Value, [Text.UTF8Encoding]::new($false))
 }
 
+function ConvertFrom-SecureValue {
+    param([Security.SecureString]$Value)
+
+    $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($Value)
+    try {
+        return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
+    }
+    finally {
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
+    }
+}
+
 Assert-Administrator
 
-if (-not $GoDaddyApiToken) {
-    $GoDaddyApiToken = Read-Host "GoDaddy API token (KEY:SECRET)" -AsSecureString
+if (-not $GoDaddyApiKey) {
+    $GoDaddyApiKey = Read-Host "GoDaddy production API key" -AsSecureString
 }
-$tokenPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($GoDaddyApiToken)
-try {
-    $plainTextGoDaddyApiToken = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($tokenPointer)
+if (-not $GoDaddyApiSecret) {
+    $GoDaddyApiSecret = Read-Host "GoDaddy production API secret" -AsSecureString
 }
-finally {
-    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($tokenPointer)
+
+$plainTextGoDaddyApiKey = ConvertFrom-SecureValue $GoDaddyApiKey
+$plainTextGoDaddyApiSecret = ConvertFrom-SecureValue $GoDaddyApiSecret
+if (
+    [string]::IsNullOrWhiteSpace($plainTextGoDaddyApiKey) -or
+    [string]::IsNullOrWhiteSpace($plainTextGoDaddyApiSecret)
+) {
+    throw "The GoDaddy production API key and secret are both required."
 }
-if ($plainTextGoDaddyApiToken -notmatch "^[^:\s]+:[^:\s]+$") {
-    throw "The GoDaddy API token must use the KEY:SECRET format."
+if ($plainTextGoDaddyApiKey.Contains(":") -or $plainTextGoDaddyApiSecret.Contains(":")) {
+    throw "The GoDaddy API key and secret cannot contain a colon."
 }
+$plainTextGoDaddyApiToken = "${plainTextGoDaddyApiKey}:${plainTextGoDaddyApiSecret}"
+$plainTextGoDaddyApiKey = $null
+$plainTextGoDaddyApiSecret = $null
 
 $requiredPaths = @(
     (Join-Path $packageRoot "app"),
