@@ -103,6 +103,8 @@ On the Windows VM:
 The VM does not need a public IP. Do not create inbound rules for ports 80 or
 3000. DNS-01 validation works by creating temporary `_acme-challenge` TXT
 records through GoDaddy's API rather than connecting to the VM.
+The Caddy configuration uses public DNS resolvers for ACME propagation checks,
+so the private `briangre.com` zone does not hide those public TXT records.
 
 When upgrading from the earlier HTTP-01 configuration, remove its TCP 80 rule
 from the Azure network security group. The installer removes the obsolete

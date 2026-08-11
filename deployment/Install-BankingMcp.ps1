@@ -208,7 +208,7 @@ $xmlCaddyWorkingDirectory = ConvertTo-XmlText $caddyDirectory
 $xmlCaddyDataDirectory = ConvertTo-XmlText $caddyDataDirectory
 $xmlGoDaddyApiToken = ConvertTo-XmlText $plainTextGoDaddyApiToken
 
-$globalOptions = "    auto_https disable_redirects`r`n    acme_dns godaddy {env.GODADDY_API_TOKEN}"
+$globalOptions = "    auto_https disable_redirects"
 if ($AcmeEmail) {
     $globalOptions = "    email $AcmeEmail`r`n$globalOptions"
 }
@@ -220,6 +220,11 @@ $globalOptions
 
 $DomainName {
     encode zstd gzip
+    tls {
+        dns godaddy {env.GODADDY_API_TOKEN}
+        resolvers 1.1.1.1 8.8.8.8
+        propagation_delay 30s
+    }
     reverse_proxy 127.0.0.1:3000
     log {
         output file "$caddyLogPath" {
