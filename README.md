@@ -176,6 +176,9 @@ The installer securely prompts separately for the GoDaddy production API key
 and secret. The values are not echoed or placed in PowerShell history. They are
 combined for Caddy and stored as a service environment variable in the WinSW
 XML, whose ACL permits access only to Administrators, SYSTEM, and LocalService.
+In Windows PowerShell 5.1, paste into these hidden prompts with **right-click**
+or **Shift+Insert**. `Ctrl+V` can be captured as control character `0x16`
+instead of pasting the clipboard.
 
 The default installation root is `C:\Services\BankingMcp`. Use
 `-InstallRoot "D:\Services\BankingMcp"` to select another fixed drive.

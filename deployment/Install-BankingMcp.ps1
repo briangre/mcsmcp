@@ -81,6 +81,7 @@ function ConvertFrom-SecureValue {
 Assert-Administrator
 
 if (-not $GoDaddyApiKey) {
+    Write-Host "Paste with right-click or Shift+Insert; Ctrl+V may be captured as a control character in Windows PowerShell 5.1."
     $GoDaddyApiKey = Read-Host "GoDaddy production API key" -AsSecureString
 }
 if (-not $GoDaddyApiSecret) {
@@ -97,6 +98,12 @@ if (
 }
 if ($plainTextGoDaddyApiKey.Contains(":") -or $plainTextGoDaddyApiSecret.Contains(":")) {
     throw "The GoDaddy API key and secret cannot contain a colon."
+}
+if (
+    $plainTextGoDaddyApiKey -notmatch "^[\x21-\x7E]+$" -or
+    $plainTextGoDaddyApiSecret -notmatch "^[\x21-\x7E]+$"
+) {
+    throw "The GoDaddy API key or secret contains an invalid character. In Windows PowerShell 5.1, paste into hidden prompts with right-click or Shift+Insert instead of Ctrl+V."
 }
 $plainTextGoDaddyApiToken = "${plainTextGoDaddyApiKey}:${plainTextGoDaddyApiSecret}"
 $plainTextGoDaddyApiKey = $null
@@ -131,7 +138,7 @@ $localServiceSid = "*S-1-5-19"
 $administratorsSid = "*S-1-5-32-544"
 $systemSid = "*S-1-5-18"
 Invoke-NativeCommand icacls.exe $serviceDirectory /inheritance:r
-Invoke-NativeCommand icacls.exe $serviceDirectory /grant:r "${administratorsSid}:(OI)(CI)F" "${systemSid}:(OI)(CI)F" "${localServiceSid}:(OI)(CI)RX" /T /C
+Invoke-NativeCommand icacls.exe $serviceDirectory /grant:r "${administratorsSid}:(OI)(CI)F" "${systemSid}:(OI)(CI)F" "${localServiceSid}:(OI)(CI)RX" /T /C /Q
 
 Stop-ServiceIfPresent $caddyServiceName
 Stop-ServiceIfPresent $bankingServiceName
@@ -258,10 +265,10 @@ finally {
 }
 $plainTextGoDaddyApiToken = $null
 
-Invoke-NativeCommand icacls.exe $InstallRoot /grant "${localServiceSid}:(OI)(CI)RX" /T /C
-Invoke-NativeCommand icacls.exe $dataDirectory /grant "${localServiceSid}:(OI)(CI)M" /T /C
-Invoke-NativeCommand icacls.exe $logDirectory /grant "${localServiceSid}:(OI)(CI)M" /T /C
-Invoke-NativeCommand icacls.exe $caddyDataDirectory /grant "${localServiceSid}:(OI)(CI)M" /T /C
+Invoke-NativeCommand icacls.exe $InstallRoot /grant "${localServiceSid}:(OI)(CI)RX" /T /C /Q
+Invoke-NativeCommand icacls.exe $dataDirectory /grant "${localServiceSid}:(OI)(CI)M" /T /C /Q
+Invoke-NativeCommand icacls.exe $logDirectory /grant "${localServiceSid}:(OI)(CI)M" /T /C /Q
+Invoke-NativeCommand icacls.exe $caddyDataDirectory /grant "${localServiceSid}:(OI)(CI)M" /T /C /Q
 
 if (-not (Get-Service -Name $bankingServiceName -ErrorAction SilentlyContinue)) {
     Invoke-NativeCommand $bankingWrapper install
