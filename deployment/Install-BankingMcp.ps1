@@ -277,9 +277,9 @@ if (-not (Get-Service -Name $caddyServiceName -ErrorAction SilentlyContinue)) {
     Invoke-NativeCommand $caddyWrapper install
 }
 
-Invoke-NativeCommand sc.exe config $bankingServiceName start= delayed-auto obj= "NT AUTHORITY\LocalService" password= ""
+Invoke-NativeCommand sc.exe config $bankingServiceName start= delayed-auto obj= "NT AUTHORITY\LocalService"
 Invoke-NativeCommand sc.exe failure $bankingServiceName reset= 86400 actions= restart/5000/restart/15000/restart/30000
-Invoke-NativeCommand sc.exe config $caddyServiceName start= delayed-auto obj= "NT AUTHORITY\LocalService" password= ""
+Invoke-NativeCommand sc.exe config $caddyServiceName start= delayed-auto obj= "NT AUTHORITY\LocalService"
 Invoke-NativeCommand sc.exe failure $caddyServiceName reset= 86400 actions= restart/5000/restart/15000/restart/30000
 
 $legacyHttpRule = Get-NetFirewallRule -Name "BankingMcp-HTTP" -ErrorAction SilentlyContinue
