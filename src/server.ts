@@ -3,6 +3,10 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import { BankStore, BankingError } from "./bankStore.js";
+import {
+  createEntraAuthMiddleware,
+  getEntraAuthConfig,
+} from "./entraAuth.js";
 
 const bank = new BankStore(process.env.BANK_DATA_DIRECTORY);
 
@@ -148,7 +152,7 @@ app.get("/health", (_req: Request, res: Response) => {
   res.json({ status: "ok", service: "sample-banking-mcp" });
 });
 
-app.post("/mcp", async (req: Request, res: Response) => {
+const handleMcpRequest = async (req: Request, res: Response) => {
   const server = createMcpServer();
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
@@ -172,7 +176,29 @@ app.post("/mcp", async (req: Request, res: Response) => {
       });
     }
   }
-});
+};
+
+app.post("/mcp", handleMcpRequest);
+
+const entraAuthConfig = getEntraAuthConfig();
+if (entraAuthConfig) {
+  app.post(
+    "/authenticated/mcp",
+    createEntraAuthMiddleware(entraAuthConfig),
+    handleMcpRequest
+  );
+} else {
+  console.warn(
+    "Authenticated MCP endpoint is unavailable because Microsoft Entra configuration is not set."
+  );
+  app.post("/authenticated/mcp", (_req: Request, res: Response) => {
+    res.status(503).json({
+      error: "authentication_not_configured",
+      error_description:
+        "The authenticated MCP endpoint is not configured on this server.",
+    });
+  });
+}
 
 const methodNotAllowed = (_req: Request, res: Response) => {
   res.status(405).json({
@@ -184,6 +210,8 @@ const methodNotAllowed = (_req: Request, res: Response) => {
 
 app.get("/mcp", methodNotAllowed);
 app.delete("/mcp", methodNotAllowed);
+app.get("/authenticated/mcp", methodNotAllowed);
+app.delete("/authenticated/mcp", methodNotAllowed);
 
 const port = Number(process.env.PORT ?? 3000);
 const host = process.env.HOST ?? "127.0.0.1";

@@ -10,6 +10,17 @@ param(
     [ValidatePattern("^[A-Za-z]:\\")]
     [string]$InstallRoot = "C:\Services\BankingMcp",
 
+    [Parameter(Mandatory = $true)]
+    [ValidatePattern("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")]
+    [string]$EntraTenantId,
+
+    [Parameter(Mandatory = $true)]
+    [ValidatePattern("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")]
+    [string]$EntraClientId,
+
+    [ValidatePattern("^\S+$")]
+    [string]$EntraRequiredScope = "Banking.Access",
+
     [Security.SecureString]$GoDaddyApiKey,
 
     [Security.SecureString]$GoDaddyApiSecret
@@ -176,6 +187,9 @@ $serverScript = ConvertTo-XmlText (Join-Path $appDirectory "dist\server.js")
 $appWorkingDirectory = ConvertTo-XmlText $appDirectory
 $xmlDataDirectory = ConvertTo-XmlText $dataDirectory
 $xmlLogDirectory = ConvertTo-XmlText $logDirectory
+$xmlEntraTenantId = ConvertTo-XmlText $EntraTenantId.ToLowerInvariant()
+$xmlEntraAudience = ConvertTo-XmlText $EntraClientId
+$xmlEntraRequiredScope = ConvertTo-XmlText $EntraRequiredScope
 
 $bankingServiceXml = @"
 <service>
@@ -189,6 +203,9 @@ $bankingServiceXml = @"
   <env name="HOST" value="127.0.0.1" />
   <env name="PORT" value="3000" />
   <env name="BANK_DATA_DIRECTORY" value="$xmlDataDirectory" />
+  <env name="ENTRA_TENANT_ID" value="$xmlEntraTenantId" />
+  <env name="ENTRA_AUDIENCE" value="$xmlEntraAudience" />
+  <env name="ENTRA_REQUIRED_SCOPE" value="$xmlEntraRequiredScope" />
   <logpath>$xmlLogDirectory</logpath>
   <log mode="roll-by-size">
     <sizeThreshold>10240</sizeThreshold>
@@ -333,6 +350,31 @@ if (-not $healthy) {
     throw "The BankingMcp service started but did not pass its local health check. Review '$logDirectory'."
 }
 
+$authGuardHealthy = $false
+try {
+    Invoke-WebRequest `
+        -Uri "http://127.0.0.1:3000/authenticated/mcp" `
+        -Method Post `
+        -ContentType "application/json" `
+        -Body "{}" `
+        -UseBasicParsing `
+        -TimeoutSec 5 | Out-Null
+}
+catch {
+    if ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 401) {
+        $authGuardHealthy = $true
+    }
+}
+if (-not $authGuardHealthy) {
+    Stop-ServiceIfPresent $bankingServiceName
+    if (Test-Path $previousAppDirectory) {
+        Remove-Item $appDirectory -Recurse -Force
+        Move-Item $previousAppDirectory $appDirectory
+        Start-Service $bankingServiceName
+    }
+    throw "The BankingMcp service is healthy, but its authenticated endpoint did not reject an unauthenticated request. Review '$logDirectory'."
+}
+
 Start-Service $caddyServiceName
 $caddyService = Get-Service $caddyServiceName
 $caddyService.WaitForStatus("Running", [TimeSpan]::FromSeconds(30))
@@ -357,10 +399,10 @@ if (Test-Path $previousAppDirectory) {
 
 Write-Host ""
 Write-Host "Banking MCP services installed successfully."
-Write-Host "Endpoint: https://$DomainName/mcp"
+Write-Host "Unauthenticated endpoint: https://$DomainName/mcp"
+Write-Host "Authenticated endpoint: https://$DomainName/authenticated/mcp"
 Write-Host "Logs: $logDirectory"
 if (-not $httpsHealthy) {
     Write-Warning "The local service is healthy, but HTTPS could not be verified from this VM. Check private DNS, network routing, and CaddyService logs."
 }
-Write-Warning "The endpoint has no authentication. Restrict its audience with network controls if it must not be public."
-Write-Warning "Allow inbound TCP 443 only from the private networks that contain authorized MCP clients."
+Write-Warning "The /mcp endpoint remains unauthenticated. Allow inbound TCP 443 only from the private networks that contain authorized MCP clients."

@@ -1,13 +1,14 @@
 # Sample Banking MCP Server
 
-A no-auth sample banking application exposed as a
+A sample banking application exposed as a
 [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction)
 server. Customer, account, and transaction data is stored in human-readable
 JSON files under `data/`.
 
 > [!WARNING]
-> This project is for demos and learning only. It has no authentication,
-> authorization, encryption, or production-grade database.
+> This project is for demos and learning only. Its `/mcp` route is intentionally
+> unauthenticated, and it has no per-customer authorization, data-at-rest
+> encryption, or production-grade database.
 
 ## Data
 
@@ -46,8 +47,27 @@ npm test
 npm start
 ```
 
-The MCP endpoint is available at `http://localhost:3000/mcp`. Configure an MCP
-client to use that Streamable HTTP URL.
+The server exposes two Streamable HTTP entry points:
+
+| Endpoint | Access |
+| --- | --- |
+| `http://localhost:3000/mcp` | No application authentication |
+| `http://localhost:3000/authenticated/mcp` | Microsoft Entra bearer token |
+
+The authenticated endpoint requires all three of these environment variables:
+
+```powershell
+$env:ENTRA_TENANT_ID = "<tenant-guid>"
+$env:ENTRA_AUDIENCE = "<API access-token audience>"
+$env:ENTRA_REQUIRED_SCOPE = "Banking.Access"
+npm start
+```
+
+Tokens are validated against the tenant's OpenID signing keys. The signature,
+v2 issuer, audience, expiration, tenant ID, and delegated scope must all be
+valid. If none of the variables are set, the unauthenticated endpoint remains
+available and the authenticated endpoint returns HTTP 503. A partial
+configuration prevents the server from starting.
 
 ## Sample requests
 
@@ -71,15 +91,18 @@ The deployment package runs two automatic Windows services:
   the GoDaddy DNS plugin on port 443, obtains and renews a public TLS certificate
   through DNS-01 validation, and proxies requests to the local MCP server.
 
-The MCP endpoint is `https://<your-domain>/mcp`. Port 3000 is never opened
-through Windows Firewall and is not reachable through the VM's public network
+The unauthenticated MCP endpoint is `https://<your-domain>/mcp`. When the
+BankingMcp service is supplied the three Entra environment variables above, the
+same tools and JSON data are also exposed through the protected endpoint at
+`https://<your-domain>/authenticated/mcp`. Port 3000 is never opened through
+Windows Firewall and is not reachable through the VM's public network
 interface.
 
 > [!CAUTION]
-> TLS protects traffic in transit but does not authenticate callers. This
-> sample intentionally has no authentication, so anyone who can reach the
-> endpoint can use its banking tools. Restrict inbound traffic at the Azure
-> network security group when the endpoint should not be generally public.
+> TLS protects traffic in transit but does not authenticate callers to `/mcp`.
+> Anyone who can reach that route can use its banking tools. Restrict inbound
+> traffic at the Azure network security group even when clients normally use
+> the authenticated route.
 
 ### Prerequisites
 
@@ -112,7 +135,7 @@ Windows Firewall rule automatically.
 
 ### Installation package layout
 
-After extracting `sample-banking-mcp-1.0.0.zip`, the package root contains:
+After extracting `sample-banking-mcp-1.1.0.zip`, the package root contains:
 
 ```text
 Install-BankingMcp.ps1
@@ -141,7 +164,7 @@ TypeScript, downloads a Caddy Windows build containing
 runtime, and writes:
 
 ```text
-artifacts\sample-banking-mcp-1.0.0.zip
+artifacts\sample-banking-mcp-1.1.0.zip
 ```
 
 It also verifies that the Caddy binary exposes `dns.providers.godaddy` and
@@ -166,12 +189,14 @@ Extract the ZIP, then open an elevated Windows PowerShell session in its root
 directory—the directory containing `Install-BankingMcp.ps1`:
 
 ```powershell
-Expand-Archive .\sample-banking-mcp-1.0.0.zip C:\Temp\sample-banking-mcp
+Expand-Archive .\sample-banking-mcp-1.1.0.zip C:\Temp\sample-banking-mcp
 Set-Location C:\Temp\sample-banking-mcp
 Set-ExecutionPolicy -Scope Process Bypass
 .\Install-BankingMcp.ps1 `
   -DomainName "bank.example.com" `
-  -AcmeEmail "admin@example.com"
+  -AcmeEmail "admin@example.com" `
+  -EntraTenantId "<directory-tenant-id>" `
+  -EntraClientId "<banking-api-application-client-id>"
 ```
 
 The installer securely prompts separately for the GoDaddy production API key
@@ -181,6 +206,13 @@ XML, whose ACL permits access only to Administrators, SYSTEM, and LocalService.
 In Windows PowerShell 5.1, paste into these hidden prompts with **right-click**
 or **Shift+Insert**. `Ctrl+V` can be captured as control character `0x16`
 instead of pasting the clipboard.
+
+`EntraTenantId` is the Microsoft Entra **Directory (tenant) ID**.
+`EntraClientId` is the **Application (client) ID** of the Sample Banking MCP
+API registration and becomes the expected v2 access-token audience. The
+installer configures the required delegated scope as `Banking.Access`; use
+`-EntraRequiredScope "<scope-name>"` only if the exposed scope has a different
+name. These identifiers are configuration values, not secrets.
 
 The default installation root is `C:\Services\BankingMcp`. Use
 `-InstallRoot "D:\Services\BankingMcp"` to select another fixed drive.
@@ -220,7 +252,12 @@ Configure the MCP client with:
 
 ```text
 https://bank.example.com/mcp
+https://bank.example.com/authenticated/mcp
 ```
+
+The first URL has no application authentication. The second requires a valid
+Microsoft Entra access token for the configured API client ID containing the
+`Banking.Access` delegated scope.
 
 WinSW service logs and Caddy access logs are written under
 `C:\Services\BankingMcp\logs`. Caddy certificate state is under
